@@ -1,0 +1,11 @@
+# TV3 — 4 luật MẪU; chưa chạy Suricata -T hay kiểm chứng traffic thật.
+# LAB_CLIENT/LAB_SERVER được định nghĩa trong overlay của TV2.
+# Marker HTTP là case-sensitive, trên normalized http.uri / http.user_agent.
+# bsize bằng độ dài marker giúp T07/T08 không khớp chuỗi tiền tố.
+alert http $LAB_CLIENT any -> $LAB_SERVER 80 (msg:"IDS LAB exact HTTP URI marker"; flow:established,to_server; http.uri; content:"/ids-demo-check"; bsize:15; sid:1000001; rev:1;)
+alert http $LAB_CLIENT any -> $LAB_SERVER 80 (msg:"IDS LAB exact User-Agent marker"; flow:established,to_server; http.user_agent; content:"IDS-LAB-TEST"; bsize:12; sid:1000002; rev:1;)
+# DNS normalized buffer không có dấu chấm cuối; so khớp không phân biệt hoa/thường.
+alert dns $LAB_CLIENT any -> $LAB_SERVER 53 (msg:"IDS LAB exact DNS marker"; dns.query; content:"alert.ids.test"; nocase; bsize:14; sid:1000003; rev:1;)
+# Chỉ báo SYN dồn dập trên dải lab; không đếm số cổng DUY NHẤT.
+# flags:S chỉ gói SYN thuần. Threshold tính gói khớp theo IP nguồn.
+alert tcp $LAB_CLIENT any -> $LAB_SERVER 8000:8019 (msg:"IDS LAB SYN burst indicator"; flags:S; threshold: type both, track by_src, count 10, seconds 10; sid:1000004; rev:1;)

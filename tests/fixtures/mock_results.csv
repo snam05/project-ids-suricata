@@ -1,0 +1,4 @@
+run_id,test_id,expected_sids,observed_sids,traffic_valid,status,evidence_dir
+MOCK_ONLY,T01,1000001,1000001,true,PASS,tests/fixtures/NOT_REAL_EVIDENCE
+MOCK_ONLY,T02,,1000002,true,FAIL,tests/fixtures/NOT_REAL_EVIDENCE
+MOCK_ONLY,T14,,,false,INVALID,tests/fixtures/NOT_REAL_EVIDENCE

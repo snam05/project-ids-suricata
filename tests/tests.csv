@@ -1,0 +1,15 @@
+test_id,description,protocol,target_ip,target_port,input_spec,expected_sids
+T01,URI khớp chính xác,HTTP,10.10.10.20,80,"{""uri"":""/ids-demo-check"",""user_agent"":""Mozilla/5.0"",""repeat"":1}",1000001
+T02,URI thông thường,HTTP,10.10.10.20,80,"{""uri"":""/index.html"",""user_agent"":""Mozilla/5.0"",""repeat"":1}",
+T03,"User-Agent khớp, URI thường",HTTP,10.10.10.20,80,"{""uri"":""/index.html"",""user_agent"":""IDS-LAB-TEST"",""repeat"":1}",1000002
+T04,User-Agent thông thường,HTTP,10.10.10.20,80,"{""uri"":""/index.html"",""user_agent"":""Mozilla/5.0"",""repeat"":1}",
+T05,DNS marker khớp,DNS,10.10.10.20,53,"{""query"":""alert.ids.test"",""qtype"":""A"",""transport"":""udp"",""tries"":1}",1000003
+T06,DNS thông thường,DNS,10.10.10.20,53,"{""query"":""normal.ids.test"",""qtype"":""A"",""transport"":""udp"",""tries"":1}",
+T07,URI thêm hậu tố không được khớp,HTTP,10.10.10.20,80,"{""uri"":""/ids-demo-check-safe"",""user_agent"":""Mozilla/5.0"",""repeat"":1}",
+T08,User-Agent thêm hậu tố không được khớp,HTTP,10.10.10.20,80,"{""uri"":""/index.html"",""user_agent"":""IDS-LAB-TESTX"",""repeat"":1}",
+T09,DNS thêm hậu tố .evil không được khớp,DNS,10.10.10.20,53,"{""query"":""alert.ids.test.evil"",""qtype"":""A"",""transport"":""udp"",""tries"":1}",
+T10,DNS thêm tiền tố không được khớp,DNS,10.10.10.20,53,"{""query"":""notalert.ids.test"",""qtype"":""A"",""transport"":""udp"",""tries"":1}",
+T11,URI và User-Agent cùng khớp,HTTP,10.10.10.20,80,"{""uri"":""/ids-demo-check"",""user_agent"":""IDS-LAB-TEST"",""repeat"":1}",1000001;1000002
+T12,URI khớp lặp đúng 3 lần,HTTP,10.10.10.20,80,"{""uri"":""/ids-demo-check"",""user_agent"":""Mozilla/5.0"",""repeat"":3}",1000001
+T13,SYN tới 20 cổng trong 10 giây,TCP_SYN,10.10.10.20,8000,"{""ports"":""8000-8019"",""syn_packets"":20,""max_window_seconds"":10,""retries"":0}",1000004
+T14,"Một SYN duy nhất, không retry",TCP_SYN,10.10.10.20,8000,"{""ports"":""8000"",""syn_packets"":1,""retries"":0}",

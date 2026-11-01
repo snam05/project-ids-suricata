@@ -1,0 +1,26 @@
+%YAML 1.1
+---
+# TV2 — OVERLAY THAM KHẢO, không phải bản cấu hình đầy đủ đã kiểm chứng.
+# Dùng -c /etc/suricata/suricata.yaml --include config/suricata.yaml
+# Không ghi đè /etc/suricata/suricata.yaml bằng file overlay này.
+# TODO: chốt phiên bản, địa chỉ thật, interface, parser HTTP/DNS,
+# checksum/offload, quyền capture, thống kê drop và kiểm tra -T.
+vars:
+  address-groups:
+    HOME_NET: "[10.10.10.0/24]"  # ví dụ local; thay bằng VPC của lab
+    EXTERNAL_NET: "!$HOME_NET"
+    LAB_CLIENT: "10.10.10.10"  # IP ví dụ, không có VPS thật
+    LAB_SERVER: "10.10.10.20"
+# Rules dùng LAB_CLIENT -> LAB_SERVER, không phụ thuộc EXTERNAL_NET.
+# -S rules/local.rules (đường dẫn từ repo root) buộc chỉ nạp 4 luật nhóm.
+outputs:
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      filename: eve.json
+      types:
+        - alert
+        - http
+        - dns
+        - flow
+        - stats

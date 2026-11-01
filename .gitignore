@@ -1,0 +1,36 @@
+# Secrets và cấu hình máy thật
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+config/*.local.*
+config/private/
+# Runtime, dữ liệu cá nhân, file lớn
+results/*
+!results/README.md
+*.log
+*.pcap
+*.pcapng
+!tests/pcaps/*.pcap
+!tests/pcaps/*.pcapng
+*.ova
+*.ovf
+*.vdi
+*.vmdk
+*.qcow2
+*.mp4
+*.mov
+# Python / editor
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.DS_Store
+.idea/
+.vscode/
+*.swp
