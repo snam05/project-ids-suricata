@@ -47,26 +47,26 @@ Sơ đồ mô tả luồng mục tiêu; các bước còn TODO chưa vận hành
 
 ```text
 project-ids-suricata/
-├── README.md
-├── config/
-│   ├── suricata.yaml        # overlay tham khảo
-│   ├── nginx.conf
-│   └── dnsmasq.conf
-├── rules/local.rules
-├── scripts/traffic_gen.sh   # TODO: sinh traffic
-├── src/
-│   ├── __init__.py
-│   ├── run_tests.py         # kiểm tra/liệt kê; TODO: điều phối
-│   ├── eve_parser.py        # EVE → alert và lỗi
-│   ├── eval_metrics.py      # tập SID → kết quả và chỉ số
-│   └── make_report.py       # TODO: kết quả → HTML
-├── tests/
-│   ├── tests.csv
-│   ├── test_eve_parser.py
-│   ├── test_eval_metrics.py
-│   ├── fixtures/           # mock_eve.json, mock_results.csv
-│   └── pcaps/              # TODO: T01.pcap … T14.pcap
-└── results/                # đầu ra runtime, không đưa Git
+├── README.md               # Hướng dẫn mục tiêu, luồng xử lý, cách kiểm tra và dữ liệu của dự án
+├── config/                 # Cấu hình mẫu cho Suricata và các dịch vụ nhận lưu lượng kiểm thử
+│   ├── suricata.yaml       # Cấu hình bổ sung: IP lab và các loại sự kiện Suricata ghi vào eve.json
+│   ├── nginx.conf          # Cấu hình web HTTP cổng 80 để nhận yêu cầu thử URI và User-Agent
+│   └── dnsmasq.conf        # Cấu hình DNS cổng 53 để nhận và trả lời truy vấn tên miền trong lab
+├── rules/local.rules       # Bốn luật mẫu phát hiện marker URI, User-Agent, DNS và SYN dồn dập
+├── scripts/traffic_gen.sh  # TODO: tạo yêu cầu HTTP, truy vấn DNS hoặc gói SYN theo từng ca thử
+├── src/                    # Mã Python đọc danh mục, xử lý log, đánh giá và tạo báo cáo
+│   ├── __init__.py         # Đánh dấu src là package Python để các module import và chạy cùng nhau
+│   ├── run_tests.py        # Đọc/kiểm tra/liệt kê ca thử; TODO: điều phối live/offline và thu bằng chứng
+│   ├── eve_parser.py       # Đọc eve.json, trích SID/IP/thời gian, giữ danh sách alert và báo lỗi từng dòng
+│   ├── eval_metrics.py     # So sánh tập SID, xác định PASS/FAIL/INVALID và tính TP/FP/TN/FN, precision/recall
+│   └── make_report.py      # TODO: đọc bảng kết quả và chỉ số đã đánh giá để tạo report.html
+├── tests/                  # Danh mục ca thử, dữ liệu đầu vào và kiểm thử logic Python
+│   ├── tests.csv           # Mô tả 14 ca: giao thức, IP/cổng đích, tham số tạo traffic và SID kỳ vọng
+│   ├── test_eve_parser.py  # Kiểm tra đọc alert, gộp SID trùng và báo lỗi log bằng dữ liệu giả
+│   ├── test_eval_metrics.py # Kiểm tra so sánh SID, loại INVALID và tính đúng các chỉ số đánh giá
+│   ├── fixtures/           # mock_eve.json và mock_results.csv: dữ liệu giả thử code, không phải số liệu lab
+│   └── pcaps/              # TODO: lưu T01.pcap … T14.pcap làm bộ đầu vào chuẩn để chạy offline
+└── results/                # Lưu PCAP/EVE/manifest và CSV/JSON/HTML theo từng lần chạy; không đưa Git
 ```
 
 Toàn bộ hướng dẫn nằm trong README này. Báo cáo, slide và video bổ sung khi có
