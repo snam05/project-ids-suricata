@@ -1,5 +1,5 @@
-# TV3 — 4 luật MẪU; chưa chạy Suricata -T hay kiểm chứng traffic thật.
-# LAB_CLIENT/LAB_SERVER được định nghĩa trong overlay của TV2.
+# 4 luật MẪU; chưa chạy Suricata -T hay kiểm chứng traffic thật.
+# LAB_CLIENT/LAB_SERVER được định nghĩa trong overlay Suricata.
 # Marker HTTP là case-sensitive, trên normalized http.uri / http.user_agent.
 # bsize bằng độ dài marker giúp T07/T08 không khớp chuỗi tiền tố.
 alert http $LAB_CLIENT any -> $LAB_SERVER 80 (msg:"IDS LAB exact HTTP URI marker"; flow:established,to_server; http.uri; content:"/ids-demo-check"; bsize:15; sid:1000001; rev:1;)

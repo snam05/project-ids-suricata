@@ -1,258 +1,222 @@
-# IDS Suricata — bộ khung đồ án nhóm 4 người
+# IDS Suricata
 
-**“Triển khai và kiểm chứng hệ thống phát hiện xâm nhập mạng bằng Suricata trong môi trường lab”.**
+Bộ khung cho đồ án “Triển khai và kiểm chứng hệ thống phát hiện xâm nhập mạng
+bằng Suricata trong môi trường lab”. Chưa dựng VPS, chưa có PCAP hay số liệu thật.
 
-Trạng thái: **bộ khung để nhóm phát triển tiếp**, chưa dựng VPS, chưa có PCAP thật,
-chưa chạy Suricata hoặc thu số liệu. Không dùng Docker. Chưa có báo cáo Word/PDF,
-slide, video hoặc report.html thực nghiệm; thư mục tương ứng có hướng dẫn TODO.
+Đã có: 4 luật mẫu, 14 ca thử, kiểm tra/liệt kê danh mục, parser EVE và logic đánh
+giá có unit test bằng mock. Điều phối live/offline, sinh traffic, xác minh bằng
+chứng và xuất HTML còn **TODO**.
 
-Đã có: cấu trúc dự án; cấu hình và 4 luật **tham khảo**; danh mục 14 ca;
-module Python với trách nhiệm/đầu vào/đầu ra; tiện ích kiểm tra/liệt kê;
-parser EVE tối thiểu và logic đánh giá tập SID có kiểm thử bằng **mock**.
-Runner live/offline, sinh traffic, kiểm chứng bằng chứng và tạo HTML còn TODO.
-
-## 1. Mục tiêu và phạm vi
-
-Quan sát HTTP/DNS/TCP SYN trong lab, ghi EVE, đối chiếu SID kỳ vọng với SID
-quan sát rồi báo cáo kết quả có PCAP/log/manifest truy vết. Ba chuỗi HTTP/DNS
-là marker thử nghiệm, không tự chứng minh tấn công thực tế. HTTP dùng bản rõ;
-HTTPS không giải mã có giới hạn quan sát nội dung. Luật SYN chỉ báo gói dồn dập,
-không đếm số cổng duy nhất, không bao phủ mọi kiểu quét. Kết luận trong dữ liệu lab.
-
-## 2. Hai máy của lab
-
-Hướng hiện tại: hai VPS cùng nhà cung cấp, region và mạng riêng VPC:
-
-```text
-VPS Client                         VPS Server + IDS
-curl / dig / Nmap  -- IP private --> nginx :80 / dnsmasq :53
-                                     Suricata quan sát traffic
-                                     Python xử lý EVE sau khi ghi xong
-```
-
-Chưa có nhà cung cấp, IP, tài khoản hoặc VPS thật. Cloud firewall phải cho phép
-traffic từ Client tới Server, gồm TCP/8000–8019; chặn trước VPS thì cảm biến
-không thấy gói. Mỗi người có tài khoản/thư mục riêng, đồng bộ code qua Git.
-Đặt lịch lab độc quyền khi chạy live chính thức để tránh nhiễu.
-
-Phương án thay thế: hai VM Ubuntu Server 24.04 LTS, cùng phiên bản;
-NAT để cài gói và Internal Network `ids-lab` để thử. Ví dụ Client
-`10.10.10.10/24`, Server `10.10.10.20/24` — đây chỉ là IP mẫu.
-TV2 dựng môi trường chuẩn, TV1 kiểm tra bàn giao; không mặc định OVA tương thích
-xuyên Intel/AMD và ARM. Xem [hướng dẫn hạ tầng](docs/lab-setup.md).
-
-## 3. Luồng và trách nhiệm
-
-Luồng dữ liệu chính:
+## Luồng xử lý
 
 ```mermaid
-flowchart TD
-    A[Client: traffic_gen.sh — TV3] --> B[Server: nginx / dnsmasq — TV2]
-    B --> C[Suricata quan sát traffic — TV2]
-    C --> D[eve.json — dữ liệu]
-    D --> E[eve_parser.py — TV4]
-    E --> F[eval_metrics.py — TV1]
-    F --> G[results.csv và metrics.json — dữ liệu]
-    G --> H[make_report.py — TV4 → report.html]
+stateDiagram-v2
+    direction TB
+    [*] --> Suricata: Luồng gói tin đi vào
+
+    state "Suricata phân tích gói tin" as Suricata
+    note right of Suricata
+        suricata.yaml: cấu hình
+        local.rules: luật phát hiện
+    end note
+
+    Suricata --> Log: Ghi sự kiện và cảnh báo
+    state "eve.json — nhật ký gốc" as Log
+
+    Log --> Parser
+    state "eve_parser.py" as Parser
+
+    Parser --> Evaluate: Trích SID, IP, thời gian
+    state "eval_metrics.py" as Evaluate
+    note right of Evaluate
+        Đọc tests/tests.csv
+        So sánh cảnh báo thực tế với kỳ vọng
+    end note
+
+    Evaluate --> Results: PASS / FAIL / INVALID và chỉ số
+    state "results.csv — bảng kết quả" as Results
+
+    Results --> Report
+    state "make_report.py" as Report
+    Report --> [*]: Xuất report.html
 ```
 
-Mũi tên từ dịch vụ tới Suricata chỉ quan hệ quan sát trên Server, không có
-chương trình nginx chuyển từng gói sang Python. Suricata/nginx/dnsmasq/tcpdump
-là công cụ có sẵn. `config/suricata.yaml` (TV2) và `rules/local.rules` (TV3)
-là cấu hình Suricata nạp, không phải chương trình chạy nối tiếp.
+Suricata là công cụ phân tích mạng; Python xử lý log sau khi engine ghi xong.
+YAML và rules là cấu hình. `run_tests.py` điều phối lần chạy, đọc danh mục và
+truyền kỳ vọng/ngữ cảnh cho evaluator; `metrics.json` lưu bảng chỉ số đi kèm kết quả.
+Sơ đồ mô tả luồng mục tiêu; các bước còn TODO chưa vận hành tự động.
 
-Trước luồng trên, `run_tests.py` (TV1) đọc `tests/tests.csv` (TV3), tạo run_id,
-gắn test_id và điều phối. Phương án dự kiến: runner trên Server gọi
-`traffic_gen.sh` trên Client qua SSH do TV2 chuẩn bị; **chưa triển khai**.
-Runner không phải bộ máy phát hiện; Python xử lý log sau Suricata.
-
-| Người | File chính | Trách nhiệm |
-| --- | --- | --- |
-| TV1 | src/run_tests.py, src/eval_metrics.py | Điều phối, xác minh lần chạy, đánh giá; tổng quan/khảo sát/kết luận, biên tập báo cáo và ghép slide |
-| TV2 | config/suricata.yaml, config/nginx.conf, config/dnsmasq.conf, scripts/lab.sh | Client/Server, mạng, dịch vụ, quyền công cụ, SSH, cài đặt/tái lập |
-| TV3 | rules/local.rules, tests/tests.csv, scripts/traffic_gen.sh, tests/pcaps/ | Luật, expected, traffic, PCAP, demo |
-| TV4 | src/eve_parser.py, src/make_report.py, tests/fixtures/ | Parser/mock/test, HTML, phần log trong báo cáo, video dự phòng |
-
-Mỗi người tự viết báo cáo và slide phần mình. TV1 không ôm việc dựng hạ tầng
-của TV2. Xem [kế hoạch và bàn giao](docs/team-plan.md).
-
-## 4. Cấu trúc
+## Cấu trúc tối giản
 
 ```text
 project-ids-suricata/
-├── README.md, requirements.txt, .gitignore, .env.example
-├── config/       suricata.yaml (overlay), nginx.conf, dnsmasq.conf
-├── rules/        local.rules
-├── scripts/      lab.sh, traffic_gen.sh, check_scaffold.py
-├── src/          __init__.py, contracts.py, run_tests.py,
-│                 eve_parser.py, eval_metrics.py, make_report.py
-├── tests/        tests.csv, test_eve_parser.py, test_eval_metrics.py
-│   ├── fixtures/ mock_eve.json, mock_results.csv, README.md
-│   └── pcaps/    README.md — TODO T01.pcap … T14.pcap
-├── results/      README.md — đầu ra runtime bị gitignore
-├── docs/         lab-setup.md, data-contract.md, team-plan.md
-├── report/       README.md — TODO report.docx/pdf
-├── slides/       README.md — TODO slides.pptx
-└── demo/         demo_script.md — TODO demo.mp4 (không đưa Git)
+├── README.md
+├── config/
+│   ├── suricata.yaml        # overlay tham khảo
+│   ├── nginx.conf
+│   └── dnsmasq.conf
+├── rules/local.rules
+├── scripts/traffic_gen.sh   # TODO: sinh traffic
+├── src/
+│   ├── __init__.py
+│   ├── run_tests.py         # kiểm tra/liệt kê; TODO: điều phối
+│   ├── eve_parser.py        # EVE → alert và lỗi
+│   ├── eval_metrics.py      # tập SID → kết quả và chỉ số
+│   └── make_report.py       # TODO: kết quả → HTML
+├── tests/
+│   ├── tests.csv
+│   ├── test_eve_parser.py
+│   ├── test_eval_metrics.py
+│   ├── fixtures/           # mock_eve.json, mock_results.csv
+│   └── pcaps/              # TODO: T01.pcap … T14.pcap
+└── results/                # đầu ra runtime, không đưa Git
 ```
 
-## 5. Công cụ và kiểm tra bộ khung
+Toàn bộ hướng dẫn nằm trong README này. Báo cáo, slide và video bổ sung khi có
+sản phẩm thật; không tạo sẵn file giả. `.gitignore` và `.gitattributes` giữ quy tắc
+bảo vệ dữ liệu và xuống dòng; `.gitkeep` chỉ giữ hai thư mục chưa có dữ liệu.
 
-Chỉ cần Python >=3.10 và Bash cho kiểm tra dưới đây, không cần quyền root hay
-Suricata. Chạy từ thư mục gốc repo; các lệnh này **đã được triển khai**:
+## Kiểm tra bộ khung
+
+Từ thư mục gốc, cần Python >=3.10 và Bash; không cần cài thư viện Python ngoài:
 
 ```bash
-python3 scripts/check_scaffold.py
 python3 -m src.run_tests --check
 python3 -m src.run_tests --list
 python3 -m unittest discover -s tests -v
-bash scripts/lab.sh check
-bash -n scripts/lab.sh scripts/traffic_gen.sh
+bash -n scripts/traffic_gen.sh
 ```
 
-Tùy chọn pytest (cùng bộ unit test, không phải kiểm thử engine):
+`--check` kiểm tra hợp đồng CSV, không kiểm chứng traffic hay luật Suricata.
+`python3 -m src.run_tests --mode live` / `--mode offline`, thực thi traffic và
+xuất báo cáo hiện trả lỗi TODO (mã 2), không tạo kết quả thực nghiệm.
+
+## Lab và cấu hình mẫu
+
+Không dùng Docker. Hai VPS cùng nhà cung cấp, region và VPC:
+Client có curl/dig/Nmap/tcpdump; Server có nginx/dnsmasq/Suricata/Python/tcpdump.
+Cả hai cần SSH và Git. Chưa có VPS, IP hoặc tài khoản thực tế.
+Phương án thay thế: hai VM Ubuntu Server 24.04 LTS, NAT để cài gói và Internal
+Network `ids-lab` để thử; không giả định OVA tương thích x86 và ARM.
+
+IP ví dụ local: Client `10.10.10.10/24`, Server `10.10.10.20/24`.
+Thay địa chỉ/interface theo lab thật. Cloud firewall và firewall máy phải cho
+Client private tới Server private ở TCP/80, UDP/53 và TCP/8000–8019; TCP/53 nếu
+thử DNS/TCP. Gói bị chặn trước Server sẽ không tới Suricata. Chỉ thử trong lab.
+
+- Chốt một phiên bản Suricata thống nhất trước thu số liệu; ghi version/hash.
+- `config/suricata.yaml` là **overlay**, nạp sau cấu hình đầy đủ của bản đã cài;
+  không dùng để ghi đè file hệ thống. Kiểm tra HTTP/DNS parser, drop, checksum/offload.
+- `config/nginx.conf` là server block đặt trong `http{}`; kiểm tra `nginx -t`.
+- `config/dnsmasq.conf` bind IP private; kiểm tra cổng 53/systemd-resolved và
+  `dnsmasq --test --conf-file=...` trước khi khởi động.
+- Chuẩn bị quyền capture/Nmap và SSH Server→Client nếu runner dùng SSH.
+  Live chính thức cần dành riêng lab, tránh traffic nền và engine chạy trùng.
+
+Lệnh minh họa sau khi môi trường đã sẵn sàng, **chưa được kiểm chứng ở bộ khung**:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install -r requirements.txt
-python3 -m pytest -q
+suricata -T -c /etc/suricata/suricata.yaml --include config/suricata.yaml -S rules/local.rules
+suricata -c /etc/suricata/suricata.yaml --include config/suricata.yaml -S rules/local.rules -r tests/pcaps/T01.pcap -l /path/to/new-case-dir
 ```
 
-Môi trường lab thật cần Client: curl/dig/Nmap/tcpdump/SSH/Git;
-Server: Suricata/nginx/dnsmasq/Python/venv/pip/tcpdump/SSH/Git.
-TV2 chốt một phiên bản Suricata thống nhất và ghi manifest. Tài liệu 8.0.0
-bên dưới không có nghĩa môi trường đã cài bản này. Chưa cần ELK/Grafana/web động.
+`-S` chỉ nạp luật nhóm; thư mục `-l` phải tồn tại và riêng cho ca. Live sẽ dùng
+interface private (`-i`) và capture tại Server. Luôn đợi engine/capture dừng sạch,
+kiểm tra mã thoát rồi mới đọc kết quả. Không có lệnh cài đặt tự động ở thời điểm này.
 
-## 6. Live và offline — thiết kế còn TODO
+## Luật và 14 ca thử
 
-- **Live:** Client sinh traffic, Suricata quan sát interface private của Server;
-  capture tại cảm biến; khóa lab và ngăn traffic nền. Kiểm tra ít nhất T01–T06,
-  T13–T14. Đợi engine/capture dừng và log hoàn tất trước đánh giá.
-- **Offline:** Suricata đọc PCAP chuẩn đã lưu. 14 ca × 3 lượt độc lập = **42 lần
-  thử**. Mỗi ca/lượt khởi động **engine mới** để đặt lại threshold/trạng thái;
-  không chạy cả thư mục trong một engine rồi coi các ca độc lập.
-- Kết quả live/offline tách thư mục, bảng và chỉ số. PCAP/video là dự phòng demo.
-
-`python3 -m src.run_tests --mode offline` hoặc `--mode live` hiện trả lỗi TODO
-(mã 2), không chạy mạng và không tạo kết quả. `traffic_gen.sh` chỉ có help;
-`make_report.py` là khung, chưa xuất HTML. Lệnh engine minh họa và cách nạp overlay
-nằm ở [docs/lab-setup.md](docs/lab-setup.md), không phải lệnh đã được kiểm chứng.
-
-## 7. Bốn luật mẫu — TV3
-
-| SID | Điều kiện dự kiến | Giới hạn |
-| --- | --- | --- |
-| 1000001 | URI normalized bằng `/ids-demo-check` | HTTP bản rõ, chính xác cả buffer |
-| 1000002 | User-Agent bằng `IDS-LAB-TEST` | Phân biệt hoa/thường, không khớp hậu tố X |
-| 1000003 | DNS query bằng `alert.ids.test` | Không phân biệt hoa/thường; không khớp tiền/hậu tố |
-| 1000004 | ≥10 SYN phù hợp/10 giây từ một nguồn, threshold both | Chỉ dải lab 8000–8019; không đếm cổng duy nhất |
-
-Luật dùng LAB_CLIENT → LAB_SERVER để cả hai máy thuộc HOME_NET vẫn khớp.
-`bsize` ràng buộc toàn bộ buffer cho ba marker. **TV2/TV3 phải chạy Suricata -T
-với phiên bản nhóm chọn và kiểm chứng PCAP thật. Chưa có xác nhận luật đã chạy.**
-
-## 8. Danh mục 14 ca — TV3
-
-Nguồn dữ liệu máy đọc: [tests/tests.csv](tests/tests.csv). Ô expected rỗng nghĩa
-là không mong SID; không dùng chữ “none” thay số. IP mẫu phải cập nhật trước chạy.
+Luật mẫu: URI chính xác `/ids-demo-check` → **1000001**; User-Agent chính xác
+`IDS-LAB-TEST` → **1000002**; DNS chính xác `alert.ids.test` (không phân biệt
+hoa/thường) → **1000003**; ≥10 SYN khớp/10 giây theo nguồn, threshold `both`,
+dải 8000–8019 → **1000004**. Ba marker không tự chứng minh tấn công; HTTP bản rõ
+có giới hạn với HTTPS không giải mã. Luật SYN không đếm cổng duy nhất hoặc bao phủ
+mọi kiểu quét. LAB_CLIENT/LAB_SERVER giúp hai máy cùng HOME_NET vẫn khớp.
+**Phải kiểm tra `suricata -T` và traffic thật; chưa xác nhận luật đã chạy.**
 
 | Ca | Input | Expected SID |
 | --- | --- | --- |
 | T01 | URI /ids-demo-check | 1000001 |
-| T02 | URI /index.html | Không có |
+| T02 | URI /index.html | Rỗng |
 | T03 | User-Agent IDS-LAB-TEST, URI thường | 1000002 |
-| T04 | User-Agent Mozilla/5.0, URI thường | Không có |
+| T04 | User-Agent Mozilla/5.0, URI thường | Rỗng |
 | T05 | DNS alert.ids.test | 1000003 |
-| T06 | DNS normal.ids.test | Không có |
-| T07 | URI /ids-demo-check-safe | Không có |
-| T08 | User-Agent IDS-LAB-TESTX | Không có |
-| T09 | DNS alert.ids.test.evil | Không có |
-| T10 | DNS notalert.ids.test | Không có |
+| T06 | DNS normal.ids.test | Rỗng |
+| T07 | URI /ids-demo-check-safe | Rỗng |
+| T08 | User-Agent IDS-LAB-TESTX | Rỗng |
+| T09 | DNS alert.ids.test.evil | Rỗng |
+| T10 | DNS notalert.ids.test | Rỗng |
 | T11 | URI và User-Agent cùng khớp | 1000001;1000002 |
-| T12 | URI khớp lặp 3 lần | Tập {1000001}, vẫn chỉ một ca |
+| T12 | URI khớp lặp đúng 3 lần | 1000001, vẫn chỉ một ca |
 | T13 | SYN 20 cổng 8000–8019 trong 10 giây | 1000004 |
-| T14 | Một SYN tới 8000, không retry | Không có |
+| T14 | Một SYN tới 8000, không retry | Rỗng |
 
-PCAP phải xác nhận điều kiện T13/T14; engine mới tránh trạng thái T13 gây nhiễu
-T14. Không có alert không đủ kết luận ca âm thành công; phải có traffic tới cảm biến.
-Dữ liệu `tests/fixtures/` là mock để làm code độc lập, **không là số liệu thật**.
+Offline: **14 ca × 3 lượt = 42 lần thử**, engine mới cho mỗi ca/lượt để đặt lại
+trạng thái. Không đưa cả thư mục PCAP vào một engine rồi coi các ca độc lập.
+Live tối thiểu T01–T06 và T13–T14; tách kết quả/chỉ số live và offline.
+PCAP phía Server cần xác nhận handshake/request HTTP, query DNS, T12 đúng 3
+request, T13 đúng dải/tốc độ và T14 đúng một SYN. Mã thoát công cụ không đủ
+xác nhận traffic. PCAP/video đã kiểm chứng là dự phòng demo, phải ghi rõ mode.
 
-## 9. Hợp đồng và đánh giá
+## Dữ liệu và đánh giá
 
-Mỗi ca/lượt một dòng `results.csv`:
+`tests/tests.csv`: `test_id,description,protocol,target_ip,target_port,input_spec,expected_sids`.
+`input_spec` là JSON object trong ô CSV, không được `eval` hoặc ghép thành lệnh shell.
+Kỳ vọng chốt trước chạy; SID cách nhau bằng `;`, ô rỗng nghĩa là tập rỗng.
+
+Mỗi ca/lượt có một dòng `results.csv`:
 
 ```text
 run_id,test_id,expected_sids,observed_sids,traffic_valid,status,evidence_dir
 ```
 
-Bằng chứng trong thư mục ca: `input.pcap`, `eve.json`, `manifest.json`.
-Manifest dự kiến lưu mode/run/test, phiên bản, config/rule hash, lệnh/thời điểm,
-mã thoát và thông tin xác nhận traffic/log. Runner gắn ngữ cảnh, EVE không tự có
-run_id/test_id. [Hợp đồng chi tiết](docs/data-contract.md).
+`traffic_valid` ghi `true`/`false`, parse tường minh. Không trùng run_id/test_id.
+Bằng chứng: `results/<mode>_<run_id>/<test_id>/{input.pcap,eve.json,manifest.json}`;
+mỗi run có thêm `results.csv`, `metrics.json`, `report.html`. Không ghi đè run cũ.
+PCAP chuẩn nằm ở `tests/pcaps/`; `input.pcap` là bản thực tế dùng trong lần chạy.
+Manifest dự kiến ghi mode/run/test, phiên bản, Git commit, hash cấu hình/luật/danh
+mục/PCAP, argv, thời gian có timezone, mã thoát, trạng thái đóng engine/capture/log,
+số lỗi parser và bằng chứng xác minh traffic. Runner gắn run_id/test_id; EVE không
+tự có chúng. Các bước xác minh/ghi file vẫn còn TODO.
 
-- **PASS:** dữ liệu hợp lệ và tập SID quan sát bằng tập kỳ vọng.
-- **FAIL:** dữ liệu hợp lệ nhưng khác kỳ vọng.
-- **INVALID:** traffic/engine/log lỗi hoặc thiếu bằng chứng; không tính vào ma trận.
+- **PASS:** traffic, engine, log và bằng chứng hợp lệ; hai tập SID bằng nhau.
+- **FAIL:** lần chạy hợp lệ nhưng tập SID khác nhau, kể cả có SID ngoài nhóm.
+- **INVALID:** traffic/engine/capture lỗi, log hỏng hoặc thiếu bằng chứng; loại khỏi ma trận.
 
-Parser phải đếm/báo dòng lỗi. Logic hiện có là hàm thuần; xác minh PCAP, engine,
-manifest và phạm vi log **còn TODO**, không tự bật cờ hợp lệ vì không thấy alert.
+Không alert chưa đủ kết luận ca âm PASS. Parser phải báo số dòng lỗi; lỗi parse,
+I/O hoặc encoding không được biến thành tập alert rỗng. Hiện parser giữ timestamp
+ở dạng chuỗi; kiểm tra thời gian/timezone/IP/phạm vi ca khi tích hợp còn TODO.
+Evaluator hiện nhận các cờ đã xác minh từ caller, chưa tự kiểm chứng PCAP/manifest.
 
-TP/FP/TN/FN tính theo từng **cặp ca–SID** trong 4 SID, không theo số alert.
-Expected SID 1 nhưng thấy SID 2 → FN cho SID 1, FP cho SID 2, ca FAIL.
-Precision = TP/(TP+FP); Recall = TP/(TP+FN); mẫu số 0 ghi **N/A** (`null` trong JSON).
-Không gọi thời gian quét cả PCAP là độ trễ từng gói. Kết luận chỉ trong bộ dữ liệu lab.
+TP/FP/TN/FN tính theo từng **cặp ca–SID** trong 4 SID. Expected có/observed có → TP;
+có/không → FN; không/có → FP; không/không → TN. Expected SID 1 nhưng thấy SID 2
+là một FN, một FP và ca FAIL. SID ngoài nhóm vẫn gây FAIL, không thêm vào ma trận.
+Precision = TP/(TP+FP), Recall = TP/(TP+FN); mẫu số 0 → **N/A** (`null` trong JSON).
+Không đếm số alert thành số ca; không gọi thời gian xử lý cả PCAP là độ trễ từng gói.
+Kết luận giới hạn trong dữ liệu lab.
 
-## 10. Đầu ra và dữ liệu public
+`tests/fixtures/` chỉ chứa **mock để kiểm thử code**, không dùng làm số liệu thật.
+`results/`, `.env` thật, key/token, cấu hình `*.local.*`, log, VM/video lớn bị ignore.
+PCAP chuẩn được phép Git theo dõi: kiểm tra dữ liệu nhạy cảm và kích thước trước
+commit. Không đưa thông tin VPS thật lên repository public.
 
-`tests/pcaps/` là đầu vào chuẩn; `results/offline_<run_id>/T01/input.pcap` là bản
-thực tế dùng trong ca đó. Mỗi run sẽ có results.csv, metrics.json, report.html;
-`results/live_<run_id>/` tổ chức tương tự nhưng tách riêng. Chưa có đầu ra runtime.
-Không tạo file giả `.pcap/.docx/.pdf/.pptx/.mp4` để lấp chỗ trống.
+## Việc còn lại và mốc hoàn thành
 
-`.env` thật, credential, key, cấu hình private, log, output runtime và VM/video lớn
-bị ignore. `.env.example` chỉ có placeholder/IP local. PCAP chuẩn khi bổ sung
-được phép Git theo dõi; TV3 phải rà dữ liệu nhạy cảm và kích thước trước commit.
-Không đưa token, mật khẩu, SSH private key hoặc thông tin VPS thật lên repo public.
+Hoàn thiện runner/traffic generator, lock lab, manifest/xác minh bằng chứng,
+parser tích hợp và HTML; tạo PCAP thật rồi chạy đủ live/offline. Viết báo cáo,
+làm slide/video sau khi có dữ liệu. Dùng nhánh riêng, commit nhỏ, review trước merge;
+không sửa expected sau khi thấy kết quả.
 
-## 11. Tiến độ và cách làm nhóm
+Năm 2026: bắt đầu 02/11; chốt tính năng 29/11; đủ số liệu và báo cáo đầy đủ 06/12;
+đóng băng code 10/12; hoàn tất nội bộ 13/12; kiểm tra/diễn tập 14–18/12;
+**hạn cuối 18/12**.
 
-| Mốc | Ngày năm 2026 |
-| --- | --- |
-| Bắt đầu tuần 10 | 02/11 |
-| Chốt tính năng | 29/11 |
-| Đủ số liệu chính thức và báo cáo đầy đủ | 06/12 |
-| Đóng băng code | 10/12 |
-| Hoàn tất nội bộ | 13/12 |
-| Sửa lỗi, kiểm tra gói nộp, diễn tập | 14–18/12 |
-| Hạn cuối toàn bộ code/số liệu/báo cáo/trình bày | **18/12** |
+## Tham khảo chính thức
 
-Nhánh theo phần việc, commit nhỏ, pull request và có người đọc trước merge.
-Ví dụ TV3 (thay bằng nhánh của mình):
+Tài liệu Suricata 8.0.0 là tham khảo, chưa phải phiên bản đã cài:
 
-```bash
-git switch main
-git pull --ff-only
-git switch -c tv3/rules-data
-# Sửa đúng phần việc, kiểm tra diff và chạy kiểm tra bộ khung
-git add rules/local.rules tests/tests.csv
-git diff --cached
-git commit -m "Update lab rules and test catalog"
-git push -u origin tv3/rules-data
-```
-
-Chốt thay đổi hợp đồng với người phụ thuộc; không sửa expected sau thực nghiệm.
-Không dùng chung một working tree cho cả nhóm. Ghi cách tái lập và version/hash
-trước bàn giao. Chi tiết theo tuần ở [docs/team-plan.md](docs/team-plan.md).
-
-## 12. Tài liệu tham khảo chính thức
-
-Các nguồn Suricata **8.0.0** là tài liệu tham khảo, chưa phải phiên bản đã cài:
-
-- [Suricata: dòng lệnh, -T, -r, --include, -S](https://docs.suricata.io/en/suricata-8.0.0/command-line-options.html)
-- [Suricata: định dạng EVE](https://docs.suricata.io/en/suricata-8.0.0/output/eve/eve-json-format.html)
-- [Suricata: HTTP keywords](https://docs.suricata.io/en/suricata-8.0.0/rules/http-keywords.html)
-- [Suricata: DNS keywords](https://docs.suricata.io/en/suricata-8.0.0/rules/dns-keywords.html)
-- [Suricata: content/bsize và payload keywords](https://docs.suricata.io/en/suricata-8.0.0/rules/payload-keywords.html)
-- [Suricata: threshold](https://docs.suricata.io/en/suricata-8.0.0/rules/thresholding.html)
-- [Nmap: kỹ thuật quét cổng](https://nmap.org/book/man-port-scanning-techniques.html)
+- [Dòng lệnh: -T, -r, --include, -S](https://docs.suricata.io/en/suricata-8.0.0/command-line-options.html)
+- [EVE JSON](https://docs.suricata.io/en/suricata-8.0.0/output/eve/eve-json-format.html)
+- [HTTP](https://docs.suricata.io/en/suricata-8.0.0/rules/http-keywords.html), [DNS](https://docs.suricata.io/en/suricata-8.0.0/rules/dns-keywords.html)
+- [Payload/bsize](https://docs.suricata.io/en/suricata-8.0.0/rules/payload-keywords.html), [threshold](https://docs.suricata.io/en/suricata-8.0.0/rules/thresholding.html)
+- [Nmap SYN scan](https://nmap.org/book/man-port-scanning-techniques.html)

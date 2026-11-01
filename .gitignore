@@ -1,7 +1,6 @@
 # Secrets và cấu hình máy thật
 .env
 .env.*
-!.env.example
 *.pem
 *.key
 id_rsa*
@@ -10,7 +9,7 @@ config/*.local.*
 config/private/
 # Runtime, dữ liệu cá nhân, file lớn
 results/*
-!results/README.md
+!results/.gitkeep
 *.log
 *.pcap
 *.pcapng

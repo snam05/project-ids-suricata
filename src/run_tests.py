@@ -1,9 +1,9 @@
-"""TV1 — điều phối. Đã có: đọc/kiểm tra/liệt kê danh mục.
+"""Điều phối. Đã có: đọc/kiểm tra/liệt kê danh mục.
 
 Đầu vào dự kiến: tests.csv, mode, số lượt, cấu hình lab, PCAP theo test_id.
 Đầu ra dự kiến: results/<mode>_<run_id>/<test_id>/ và bảng tổng hợp.
-TODO: run_id duy nhất; lock lab live; SSH tới Client (TV2 chuẩn bị);
-khởi động/capture/đợi engine; manifest; xác minh bằng chứng; gọi TV4/TV1.
+TODO: run_id duy nhất; lock lab live; SSH tới Client;
+khởi động/capture/đợi engine; manifest; xác minh bằng chứng; gọi parser, evaluator và renderer.
 Hiện không tạo traffic, không khởi động Suricata, không ghi kết quả giả.
 """
 import argparse
@@ -13,9 +13,30 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from .contracts import GROUP_SIDS, TEST_FIELDS, parse_sids, format_sids
+from .eval_metrics import GROUP_SIDS
 
 ROOT = Path(__file__).resolve().parents[1]
+TEST_FIELDS = (
+    "test_id", "description", "protocol", "target_ip", "target_port",
+    "input_spec", "expected_sids",
+)
+
+
+def parse_sids(value: str) -> frozenset[int]:
+    """CSV dùng dấu ;, ô rỗng nghĩa là tập rỗng. Không bỏ qua token lỗi."""
+    if not value.strip():
+        return frozenset()
+    parts = value.split(";")
+    if any(not p.strip().isascii() or not p.strip().isdigit() for p in parts):
+        raise ValueError(f"SID không hợp lệ: {value!r}")
+    sids = frozenset(int(p) for p in parts)
+    if any(s <= 0 for s in sids):
+        raise ValueError("SID phải là số nguyên dương")
+    return sids
+
+
+def format_sids(sids: frozenset[int]) -> str:
+    return ";".join(str(sid) for sid in sorted(sids))
 
 
 @dataclass(frozen=True)
@@ -74,7 +95,7 @@ def main() -> int:
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
     if args.mode:
-        parser.error("TODO TV1/TV2/TV3: runner live/offline chưa triển khai")
+        parser.error("TODO: runner live/offline chưa triển khai")
     if args.list:
         for case in cases:
             print(f"{case.test_id} | {case.protocol:7} | {format_sids(case.expected_sids) or '(không SID)'} | {case.description}")

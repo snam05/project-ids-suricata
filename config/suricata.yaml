@@ -1,6 +1,6 @@
 %YAML 1.1
 ---
-# TV2 — OVERLAY THAM KHẢO, không phải bản cấu hình đầy đủ đã kiểm chứng.
+# OVERLAY THAM KHẢO, không phải bản cấu hình đầy đủ đã kiểm chứng.
 # Dùng -c /etc/suricata/suricata.yaml --include config/suricata.yaml
 # Không ghi đè /etc/suricata/suricata.yaml bằng file overlay này.
 # TODO: chốt phiên bản, địa chỉ thật, interface, parser HTTP/DNS,

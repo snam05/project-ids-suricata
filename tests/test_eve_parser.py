@@ -1,4 +1,4 @@
-"""TV4 — mock/unit test, không phải số liệu thực nghiệm Suricata."""
+"""Mock/unit test, không phải số liệu thực nghiệm Suricata."""
 import json
 import tempfile
 import unittest

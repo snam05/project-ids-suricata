@@ -1,4 +1,4 @@
-"""TV1 — phép đánh giá tập SID và ma trận theo ca–SID (đã có unit test).
+"""Phép đánh giá tập SID và ma trận theo ca–SID (đã có unit test).
 
 Input: SID kỳ vọng, SID quan sát; ngữ cảnh và kết luận xác minh của runner.
 Output: CaseResult; aggregate_metrics trả dict để sau này ghi metrics.json.
@@ -7,7 +7,8 @@ chống trùng ca–lượt; tách mode live/offline trước khi tổng hợp.
 Các cờ True là kết luận từ bước xác minh, không phải mặc định tự suy ra.
 """
 from dataclasses import dataclass
-from .contracts import GROUP_SIDS
+
+GROUP_SIDS = frozenset({1000001, 1000002, 1000003, 1000004})
 
 
 @dataclass(frozen=True)
@@ -56,5 +57,5 @@ def aggregate_metrics(results: list[CaseResult]) -> dict:
     for bucket in [totals, *per_sid.values()]:
         bucket["precision"] = bucket["TP"] / (bucket["TP"] + bucket["FP"]) if bucket["TP"] + bucket["FP"] else None
         bucket["recall"] = bucket["TP"] / (bucket["TP"] + bucket["FN"]) if bucket["TP"] + bucket["FN"] else None
-    # JSON null = N/A; renderer TV4 phải hiển thị N/A, không đổi thành 0.
+    # JSON null = N/A; renderer phải hiển thị N/A, không đổi thành 0.
     return {"case_counts": counts, "overall": totals, "per_sid": per_sid}

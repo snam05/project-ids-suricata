@@ -1,4 +1,4 @@
-"""TV4 — bộ đọc EVE JSON Lines tối thiểu, đã có kiểm thử với dữ liệu mock.
+"""Bộ đọc EVE JSON Lines tối thiểu, đã có kiểm thử với dữ liệu mock.
 
 Input: một eve.json đã đóng của MỘT ca/lượt, do runner cung cấp ngữ cảnh.
 Output: ParseResult gồm alert, số dòng, danh sách lỗi kèm số dòng.

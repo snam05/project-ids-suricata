@@ -1,7 +1,7 @@
-"""TV1 — kiểm tra logic tập SID; mock không được dùng làm kết quả lab."""
+"""Kiểm tra logic tập SID; mock không được dùng làm kết quả lab."""
 import unittest
 from src.eval_metrics import evaluate_case, aggregate_metrics
-from src.contracts import parse_sids
+from src.run_tests import parse_sids
 
 
 def valid_case(expected, observed, **kwargs):

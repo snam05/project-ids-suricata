@@ -1,3 +1,0 @@
-# Runtime Python: chỉ standard library, Python >= 3.10.
-# Tùy chọn để chạy cùng bộ test bằng pytest; unittest có sẵn cũng chạy được.
-pytest>=8,<10
