@@ -1,8 +1,5 @@
 # IDS Suricata
 
-Bộ khung cho đồ án “Triển khai và kiểm chứng hệ thống phát hiện xâm nhập mạng
-bằng Suricata trong môi trường lab”. Chưa dựng VPS, chưa có PCAP hay số liệu thật.
-
 Đã có: 4 luật mẫu, 14 ca thử, kiểm tra/liệt kê danh mục, parser EVE và logic đánh
 giá có unit test bằng mock. Điều phối live/offline, sinh traffic, xác minh bằng
 chứng và xuất HTML còn **TODO**.
@@ -93,10 +90,7 @@ xuất báo cáo hiện trả lỗi TODO (mã 2), không tạo kết quả thự
 
 ## Lab và cấu hình mẫu
 
-Không dùng Docker. Hai VPS cùng nhà cung cấp, region và VPC:
-Client có curl/dig/Nmap/tcpdump; Server có nginx/dnsmasq/Suricata/Python/tcpdump.
-Cả hai cần SSH và Git. Chưa có VPS, IP hoặc tài khoản thực tế.
-Phương án thay thế: hai VM Ubuntu Server 24.04 LTS, NAT để cài gói và Internal
+Phương án triển khai: hai VM Ubuntu Server 24.04 LTS, NAT để cài gói và Internal
 Network `ids-lab` để thử; không giả định OVA tương thích x86 và ARM.
 
 IP ví dụ local: Client `10.10.10.10/24`, Server `10.10.10.20/24`.
