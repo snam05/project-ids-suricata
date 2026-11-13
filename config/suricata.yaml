@@ -1,18 +1,50 @@
 %YAML 1.1
 ---
-# OVERLAY THAM KHẢO, không phải bản cấu hình đầy đủ đã kiểm chứng.
-# Dùng -c /etc/suricata/suricata.yaml --include config/suricata.yaml
-# Không ghi đè /etc/suricata/suricata.yaml bằng file overlay này.
-# TODO: chốt phiên bản, địa chỉ thật, interface, parser HTTP/DNS,
-# checksum/offload, quyền capture, thống kê drop và kiểm tra -T.
+# Cấu hình chính của lab. Chạy Suricata từ thư mục gốc của repo.
+default-log-dir: results
+default-rule-path: rules
+rule-files:
+  - local.rules
+# Ngưỡng phát hiện nằm trong rules/local.rules.
+threshold-file: /dev/null
+
 vars:
   address-groups:
-    HOME_NET: "[10.10.10.0/24]"  # ví dụ local; thay bằng VPC của lab
+    HOME_NET: "[10.10.10.0/24]"
     EXTERNAL_NET: "!$HOME_NET"
-    LAB_CLIENT: "10.10.10.10"  # IP ví dụ, không có VPS thật
+    LAB_CLIENT: "10.10.10.10"
     LAB_SERVER: "10.10.10.20"
-# Rules dùng LAB_CLIENT -> LAB_SERVER, không phụ thuộc EXTERNAL_NET.
-# -S rules/local.rules (đường dẫn từ repo root) buộc chỉ nạp 4 luật nhóm.
+
+app-layer:
+  protocols:
+    http:
+      enabled: yes
+    dns:
+      tcp:
+        enabled: yes
+        detection-ports:
+          dp: 53
+      udp:
+        enabled: yes
+        detection-ports:
+          dp: 53
+
+unix-command:
+  enabled: no
+
+pcap-file:
+  continuous: false
+  delete-when-done: false
+
+logging:
+  default-log-level: notice
+  outputs:
+    - console:
+        enabled: yes
+
+stats:
+  enabled: yes
+
 outputs:
   - eve-log:
       enabled: yes

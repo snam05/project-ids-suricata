@@ -1,8 +1,8 @@
 # IDS Suricata
 
-Đã có: 4 luật mẫu, 14 ca thử, kiểm tra/liệt kê danh mục, parser EVE và logic đánh
-giá có unit test bằng mock. Điều phối live/offline, sinh traffic, xác minh bằng
-chứng và xuất HTML còn **TODO**.
+Đã có hai script chạy Suricata live/offline, 4 luật mẫu, 14 ca thử, parser EVE và
+logic đánh giá có unit test bằng mock. Tích hợp runner Python, sinh traffic, xác
+minh bằng chứng và xuất HTML còn **TODO**.
 
 ## Luồng xử lý
 
@@ -49,10 +49,13 @@ Sơ đồ mô tả luồng mục tiêu; các bước còn TODO chưa vận hành
 project-ids-suricata/
 ├── README.md               # Hướng dẫn mục tiêu, luồng xử lý, cách kiểm tra và dữ liệu của dự án
 ├── config/                 # Cấu hình mẫu cho Suricata và các dịch vụ nhận lưu lượng kiểm thử
-│   ├── suricata.yaml       # Cấu hình bổ sung: IP lab và các loại sự kiện Suricata ghi vào eve.json
+│   ├── suricata.yaml       # Cấu hình chính của lab: IP, bộ luật và các loại sự kiện EVE
 │   ├── nginx.conf          # Cấu hình web HTTP cổng 80 để nhận yêu cầu thử URI và User-Agent
 │   └── dnsmasq.conf        # Cấu hình DNS cổng 53 để nhận và trả lời truy vấn tên miền trong lab
 ├── rules/local.rules       # Bốn luật mẫu phát hiện marker URI, User-Agent, DNS và SYN dồn dập
+├── scripts/run_live.sh     # Cập nhật repo và quản lý phiên live bằng systemd
+├── scripts/run_offline.sh  # Cập nhật repo, đọc từng PCAP và xuất EVE
+├── scripts/lib/            # Khóa checkout, cập nhật Git và kiểm tra cấu hình chung
 ├── scripts/traffic_gen.sh  # TODO: tạo yêu cầu HTTP, truy vấn DNS hoặc gói SYN theo từng ca thử
 ├── src/                    # Mã Python đọc danh mục, xử lý log, đánh giá và tạo báo cáo
 │   ├── __init__.py         # Đánh dấu src là package Python để các module import và chạy cùng nhau
@@ -69,7 +72,7 @@ project-ids-suricata/
 └── results/                # Lưu PCAP/EVE/manifest và CSV/JSON/HTML theo từng lần chạy; không đưa Git
 ```
 
-Toàn bộ hướng dẫn nằm trong README này. Báo cáo, slide và video bổ sung khi có
+Hướng dẫn chung nằm trong README này. Báo cáo, slide và video bổ sung khi có
 sản phẩm thật; không tạo sẵn file giả. `.gitignore` và `.gitattributes` giữ quy tắc
 bảo vệ dữ liệu và xuống dòng; `.gitkeep` chỉ giữ hai thư mục chưa có dữ liệu.
 
@@ -88,35 +91,158 @@ bash -n scripts/traffic_gen.sh
 `python3 -m src.run_tests --mode live` / `--mode offline`, thực thi traffic và
 xuất báo cáo hiện trả lỗi TODO (mã 2), không tạo kết quả thực nghiệm.
 
-## Lab và cấu hình mẫu
+## Triển khai lab
 
-Phương án triển khai: hai VM Ubuntu Server 24.04 LTS, NAT để cài gói và Internal
-Network `ids-lab` để thử; không giả định OVA tương thích x86 và ARM.
+Server lab hiện dùng **Suricata 8.0.3 RELEASE**. Mỗi lượt dùng bản sao
+`config/suricata.yaml` và `rules/` lấy từ commit vừa kéo về. Bản sao và mã
+commit (`git-commit.txt`) nằm trong thư mục kết quả của lượt đó.
 
-IP ví dụ local: Client `10.10.10.10/24`, Server `10.10.10.20/24`.
-Thay địa chỉ/interface theo lab thật. Cloud firewall và firewall máy phải cho
-Client private tới Server private ở TCP/80, UDP/53 và TCP/8000–8019; TCP/53 nếu
-thử DNS/TCP. Gói bị chặn trước Server sẽ không tới Suricata. Chỉ thử trong lab.
+Tên thư mục kết quả dùng giờ Việt Nam (UTC+7), có hậu tố `+0700` trong phần
+thời gian. Ví dụ `results/live_20261113T171500+0700.A1b2C3/` là phiên tạo lúc
+17:15 ngày 13/11/2026. Thư mục offline dùng cùng định dạng với tiền tố `offline_`.
 
-- Chốt một phiên bản Suricata thống nhất trước thu số liệu; ghi version/hash.
-- `config/suricata.yaml` là **overlay**, nạp sau cấu hình đầy đủ của bản đã cài;
-  không dùng để ghi đè file hệ thống. Kiểm tra HTTP/DNS parser, drop, checksum/offload.
-- `config/nginx.conf` là server block đặt trong `http{}`; kiểm tra `nginx -t`.
-- `config/dnsmasq.conf` bind IP private; kiểm tra cổng 53/systemd-resolved và
-  `dnsmasq --test --conf-file=...` trước khi khởi động.
-- Chuẩn bị quyền capture/Nmap và SSH Server→Client nếu runner dùng SSH.
-  Live chính thức cần dành riêng lab, tránh traffic nền và engine chạy trùng.
+### 1. Chuẩn bị hai máy
 
-Lệnh minh họa sau khi môi trường đã sẵn sàng, **chưa được kiểm chứng ở bộ khung**:
+| Máy | IP lab | Vai trò |
+| --- | --- | --- |
+| Client | `10.10.10.10/24` | Gửi lưu lượng thử |
+| Server | `10.10.10.20/24` | Chạy nginx và Suricata, lưu PCAP và EVE |
+
+Trên hai VM Ubuntu Server 24.04 LTS trong VirtualBox, dùng một adapter NAT để
+cài gói và kéo repo, cùng một adapter Internal Network tên `ids-lab` để thử.
+Gán IP ở bảng trên cho adapter Internal Network và để default gateway trên
+adapter NAT.
+
+Trên **Server**, cài các gói phụ trợ, kiểm tra phiên bản Suricata và dừng service
+mặc định để mỗi lượt thử dùng một tiến trình riêng. Nếu VM mới chưa có Suricata,
+xem [hướng dẫn cài trên Ubuntu của OISF](https://docs.suricata.io/en/suricata-8.0.3/install/ubuntu.html)
+và kiểm tra phiên bản thực tế trước khi thu số liệu.
 
 ```bash
-suricata -T -c /etc/suricata/suricata.yaml --include config/suricata.yaml -S rules/local.rules
-suricata -c /etc/suricata/suricata.yaml --include config/suricata.yaml -S rules/local.rules -r tests/pcaps/T01.pcap -l /path/to/new-case-dir
+sudo apt update
+sudo apt install -y git nginx python3 tcpdump
+suricata -V
+sudo systemctl disable --now suricata
 ```
 
-`-S` chỉ nạp luật nhóm; thư mục `-l` phải tồn tại và riêng cho ca. Live sẽ dùng
-interface private (`-i`) và capture tại Server. Luôn đợi engine/capture dừng sạch,
-kiểm tra mã thoát rồi mới đọc kết quả. Không có lệnh cài đặt tự động ở thời điểm này.
+Trên **Client**, cài `curl` bằng `sudo apt install -y curl`. Cho phép Client truy
+cập TCP/80 của Server qua mạng lab. Khi mở rộng sang ca DNS hoặc SYN, cấu hình
+firewall riêng cho các cổng tương ứng trong danh mục ca thử.
+
+### 2. Clone repo trên Server
+
+Clone bằng tài khoản thường. Dùng một bản clone triển khai sạch trên nhánh `main`
+để có thể cập nhật trực tiếp từ `origin/main`. Nếu đã clone, vào thư mục có sẵn.
+
+```bash
+git clone https://github.com/snam05/project-ids-suricata.git
+cd project-ids-suricata
+git switch main
+git pull --ff-only origin main
+```
+
+Mỗi lần `run_live.sh start` hoặc `run_offline.sh` thực hiện các bước sau:
+
+1. Lấy khóa của bản clone và chạy `git pull --ff-only origin main`. Nếu một
+   lượt khác đang chuẩn bị đầu vào, lệnh đợi đến khi lấy được khóa.
+2. In một dòng `[commit][live]` hoặc `[commit][offline]` ngay sau khi cập nhật
+   thành công, trước phiên bản Suricata và bước kiểm tra config.
+3. Lưu mã commit, sao chép config và rules từ commit đó vào thư mục lượt, rồi
+   sao chép các PCAP đầu vào nếu chạy offline. Sau đó nhả khóa.
+4. Kiểm tra config và rules của lượt bằng `suricata -T --init-errors-fatal`.
+   Khi kiểm tra thành công, mở phiên live hoặc xử lý lần lượt từng PCAP.
+
+Dòng commit hiển thị nhánh nguồn, mã đầy đủ, thời điểm commit kèm múi giờ, tác
+giả và dòng tiêu đề của thông điệp commit. Script in dòng này ra terminal qua
+`stderr` để có thể thu cùng các thông báo kiểm tra. Ví dụ định dạng:
+
+```text
+[commit][live] origin/main | 0123456789abcdef0123456789abcdef01234567 | 2026-11-13T17:00:00+07:00 | Lan Nguyen | Update lab rules
+```
+
+Nếu cần tra lại thông tin từ kết quả cũ, chạy lệnh sau từ bản clone. Thay
+`THU_MUC_LUOT` bằng đường dẫn thư mục phiên live hoặc lượt offline đã in ra:
+
+```bash
+git show --no-patch "$(cat THU_MUC_LUOT/git-commit.txt)"
+```
+
+Live và offline có thể chạy song song theo thứ tự bất kỳ sau khi nhả khóa.
+Dùng cùng bản clone để các lệnh chia sẻ khóa. Mỗi Server có tối đa một phiên
+live. Nếu cập nhật hoặc kiểm tra thất bại, script báo lỗi trước khi chạy engine
+cho lượt thử. Đưa thay đổi của nhóm lên `main` để Server nhận chúng. Nếu lab đổi
+IP, đồng bộ `HOME_NET`, `LAB_CLIENT`, `LAB_SERVER` trong `config/suricata.yaml`,
+địa chỉ nghe của dịch vụ trong `config/` và
+`target_ip` trong `tests/tests.csv` trước khi đưa thay đổi lên `main`.
+
+### 3. Chạy live
+
+Trên **Server**, xác định interface ở sau `dev` trong kết quả `ip route get`.
+Nếu thử HTTP, bật nginx bằng server block trong repo trước khi gửi request.
+
+```bash
+sudo install -m 0644 config/nginx.conf /etc/nginx/conf.d/ids-lab.conf
+sudo nginx -t && sudo systemctl reload nginx
+ip -4 route get 10.10.10.10
+```
+
+Thay `TEN_CARD` bằng interface vừa xác định:
+
+```bash
+./scripts/run_live.sh start TEN_CARD
+./scripts/run_live.sh status
+```
+
+`start` chạy một tiến trình nền bằng unit tạm `suricata-ids-lab.service` và chờ
+engine sẵn sàng. Tiến trình tiếp tục khi đóng SSH. Script tự gọi `sudo` để điều
+khiển systemd. Nếu phiên đang chạy, dùng `stop` trước khi bắt đầu phiên mới.
+`status` hiển thị trạng thái phiên và đường dẫn EVE. `status` và `stop` dùng
+phiên hiện tại, vì vậy hai lệnh này không kéo repo.
+
+Nếu muốn thu PCAP của T01 để chạy offline, mở terminal thứ hai trên Server
+sau khi `start` báo thành công. Dùng cùng interface và thư mục phiên đã in ra:
+
+```bash
+iface=TEN_CARD
+case_dir=/duong/dan/toi/thu_muc_phien_live
+sudo tcpdump -i "$iface" -Z "$(id -un)" -s 0 -w "$case_dir/input.pcap" \
+  'host 10.10.10.10 and tcp port 80'
+```
+
+Để thử T01, gửi yêu cầu từ **Client** sau khi Suricata sẵn sàng và tcpdump
+đã bắt đầu nghe nếu dùng bước thu PCAP:
+
+```bash
+curl --noproxy '*' --http1.1 --fail --show-error --max-time 10 http://10.10.10.20/ids-demo-check
+```
+
+Nếu đang chạy tcpdump, bấm `Ctrl+C` trong terminal đó để đóng PCAP. Sau đó
+kết thúc phiên trên **Server**:
+
+```bash
+./scripts/run_live.sh stop
+```
+
+`stop` gửi `SIGINT`, chờ engine đóng file và in đường dẫn `eve.json`. File
+được giữ tại `results/live_<thời_gian>.<hậu_tố>/eve.json`. Với T01, kiểm tra
+`alert.signature_id` có giá trị `1000001`. Lần `start` sau tạo tiến trình và
+thư mục mới. Xem lỗi bằng `sudo journalctl -u suricata-ids-lab.service -b`.
+
+### 4. Đọc lại PCAP offline
+
+Truyền một hoặc nhiều file PCAP đã có. Ví dụ, dùng file vừa bắt trong phiên live
+hoặc các file đã đưa vào `tests/pcaps/`.
+
+```bash
+./scripts/run_offline.sh /duong/dan/toi/input.pcap
+./scripts/run_offline.sh tests/pcaps/T01.pcap tests/pcaps/T02.pcap
+```
+
+Mỗi lần gọi script tạo một lượt `results/offline_<thời_gian>.<hậu_tố>/`. Script
+sao chép PCAP thành `001/input.pcap`, `002/input.pcap` theo thứ tự đối số. Mỗi
+PCAP có một tiến trình Suricata riêng, ghi `eve.json` cạnh bản sao đó. Truyền
+PCAP đã ghi xong để bản sao chứa đầy đủ dữ liệu. Runner Python vẫn đang ở bước
+kiểm tra và liệt kê danh mục.
 
 ## Luật và 14 ca thử
 
@@ -207,10 +333,11 @@ Năm 2026: bắt đầu 02/11; chốt tính năng 29/11; đủ số liệu và b
 
 ## Tham khảo chính thức
 
-Tài liệu Suricata 8.0.0 là tham khảo, chưa phải phiên bản đã cài:
+Tài liệu theo phiên bản đang dùng trên Server lab, Suricata 8.0.3:
 
-- [Dòng lệnh: -T, -r, --include, -S](https://docs.suricata.io/en/suricata-8.0.0/command-line-options.html)
-- [EVE JSON](https://docs.suricata.io/en/suricata-8.0.0/output/eve/eve-json-format.html)
-- [HTTP](https://docs.suricata.io/en/suricata-8.0.0/rules/http-keywords.html), [DNS](https://docs.suricata.io/en/suricata-8.0.0/rules/dns-keywords.html)
-- [Payload/bsize](https://docs.suricata.io/en/suricata-8.0.0/rules/payload-keywords.html), [threshold](https://docs.suricata.io/en/suricata-8.0.0/rules/thresholding.html)
+- [Tùy chọn `-c`, `-T`, `--pcap`, `-r`, `-l`](https://docs.suricata.io/en/suricata-8.0.3/command-line-options.html)
+- [Cấu hình `default-rule-path` và `rule-files`](https://docs.suricata.io/en/suricata-8.0.3/configuration/suricata-yaml.html#rule-files)
+- [EVE JSON](https://docs.suricata.io/en/suricata-8.0.3/output/eve/eve-json-format.html)
+- [HTTP](https://docs.suricata.io/en/suricata-8.0.3/rules/http-keywords.html), [DNS](https://docs.suricata.io/en/suricata-8.0.3/rules/dns-keywords.html)
+- [Payload/bsize](https://docs.suricata.io/en/suricata-8.0.3/rules/payload-keywords.html), [threshold](https://docs.suricata.io/en/suricata-8.0.3/rules/thresholding.html)
 - [Nmap SYN scan](https://nmap.org/book/man-port-scanning-techniques.html)
